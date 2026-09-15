@@ -1,0 +1,80 @@
+module lfsr_tpg (
+    input  wire       clk,     // System Clock
+    input  wire       rst_n,   // Active-low asynchronous reset
+    input  wire       en,      // Enable signal to advance pattern
+    output reg  [3:0] pattern  // 4-bit generated test pattern
+);
+
+    // Feedback bit calculation using standard XOR taps for a 4-bit maximal length
+    // Polynomial: X^4 + X^3 + 1 -> Taps at bit positions 3 and 2 (0-indexed)
+    wire feedback;
+    assign feedback = pattern[3] ^ pattern[2];
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            // Critical: Seed the LFSR with a non-zero value. 
+            // An all-zero state causes an XOR-based LFSR to lock up.
+            pattern <= 4'b0001; 
+        end else if (en) begin
+            // Shift left and inject the feedback bit at the LSB
+            pattern <= {pattern[2:0], feedback};
+        end
+    end
+
+endmodule
+
+
+TestBench Module 
+
+`timescale 1ns / 1ps
+
+module lfsr_tpg_tb;
+
+    // Inputs
+    reg clk;
+    reg rst_n;
+    reg en;
+
+    // Outputs
+    wire [3:0] pattern;
+
+    // Instantiate the Unit Under Test (UUT)
+    lfsr_tpg uut (
+        .clk(clk),
+        .rst_n(rst_n),
+        .en(en),
+        .pattern(pattern)
+    );
+
+    // Clock generation (50MHz -> 20ns period)
+    always #10 clk = ~clk;
+
+    initial begin
+        // Initialize Inputs
+        clk   = 0;
+        rst_n = 0;
+        en    = 0;
+
+        // Hold reset state for 40ns
+        #40;
+        rst_n = 1; // Release reset
+        
+        #20;
+        en = 1;    // Enable the pattern generator
+
+        // Display the output pattern at every positive clock edge
+        $display("Time\t Pattern (Bin)\t Pattern (Hex)");
+        forever @(posedge clk) begin
+            if (en) begin
+                $display("%0d ns\t %b\t\t %h", $time, pattern, pattern);
+            end
+        end
+    end
+
+    // Stop simulation after cycling through all 15 states
+    initial begin
+        #400;
+        $finish;
+    end
+
+endmodule
